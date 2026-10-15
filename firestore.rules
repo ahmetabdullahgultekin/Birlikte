@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEvent(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+             data.venueName is string && data.venueName.size() >= 1 && data.venueName.size() <= 200 &&
+             data.organizerId is string && data.organizerId.size() >= 1 && data.organizerId.size() <= 128 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+             (!('category' in data) || (data.category is string && data.category.size() <= 100)) &&
+             (!('inviteCode' in data) || (data.inviteCode is string && data.inviteCode.size() <= 32));
+    }
+
+    function isValidMember(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.attendance is string && data.attendance.size() <= 32 &&
+             (!('departureTime' in data) || (data.departureTime is string && data.departureTime.size() <= 32)) &&
+             (!('originName' in data) || (data.originName is string && data.originName.size() <= 150)) &&
+             (!('vehicleType' in data) || (data.vehicleType is string && data.vehicleType.size() <= 32)) &&
+             (!('liveStatus' in data) || (data.liveStatus is string && data.liveStatus.size() <= 32)) &&
+             (!('privacyMode' in data) || (data.privacyMode is string && data.privacyMode.size() <= 32));
+    }
+
+    function isValidChatMessage(data) {
+      return data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 2000;
+    }
+
+    function isValidExpense(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+             data.amount is number && data.amount >= 0 &&
+             data.paidByMemberId is string && data.paidByMemberId.size() >= 1 && data.paidByMemberId.size() <= 128;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /events/{eventId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(eventId) && incoming().organizerId == request.auth.uid && isValidEvent(incoming());
+      allow update: if isSignedIn() && isValidId(eventId) && isValidEvent(incoming());
+      allow delete: if isSignedIn() && isValidId(eventId) && existing().organizerId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(memberId) && incoming().userId == request.auth.uid && isValidMember(incoming());
+        allow update: if isSignedIn() && isValidId(memberId) && incoming().userId == request.auth.uid && isValidMember(incoming());
+        allow delete: if isSignedIn() && isValidId(memberId) && existing().userId == request.auth.uid;
+      }
+
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(messageId) && incoming().senderId == request.auth.uid && isValidChatMessage(incoming());
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(messageId) && existing().senderId == request.auth.uid;
+      }
+
+      match /expenses/{expenseId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(expenseId) && incoming().paidByMemberId == request.auth.uid && isValidExpense(incoming());
+        allow update: if isSignedIn() && isValidId(expenseId) && existing().paidByMemberId == request.auth.uid && isValidExpense(incoming());
+        allow delete: if isSignedIn() && isValidId(expenseId) && existing().paidByMemberId == request.auth.uid;
+      }
+    }
+  }
+}

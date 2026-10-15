@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -44,6 +43,7 @@ import com.example.model.LiveStatus
 import com.example.model.Member
 import com.example.model.OrganizationEvent
 import com.example.ui.components.CanvasMapView
+import com.example.ui.components.GeminiVenueIntelligenceDialog
 import com.example.ui.theme.BirlikteCyan
 import com.example.ui.theme.BirlikteIndigo
 import com.example.ui.theme.StatusGreen
@@ -67,8 +67,8 @@ fun MapScreen(
     isDark: Boolean
 ) {
     var activeFilter by remember { mutableStateOf(MapDistanceFilter.ALL) }
+    var showAiDialog by remember { mutableStateOf(false) }
 
-    // Filter members according to location criteria
     val filteredMembers = remember(event.members, activeFilter) {
         val attending = event.members.filter { it.attendance == AttendanceStatus.COMING }
         when (activeFilter) {
@@ -81,7 +81,6 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Core interactive Canvas Map View
         CanvasMapView(
             event = event,
             filteredMembers = filteredMembers,
@@ -92,158 +91,197 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Overlay Header: Live Radar telemetry banner and filter chips
+        // Top Floating Header: Telemetry status + AI Assistant button
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(14.dp)
         ) {
-            // Live Status indicator badge
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                shadowElevation = 4.dp
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Live Radar Status Pill
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    shadowElevation = 4.dp
                 ) {
-                    Icon(
-                        Icons.Default.Sensors,
-                        contentDescription = null,
-                        tint = if (webSocketConnected) StatusGreen else Color.Gray,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        if (webSocketConnected) "Canlı Radar Takibi • WSS: ${pingMs}ms" else "Canlı Takip: Çevrimdışı",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (webSocketConnected) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "(${filteredMembers.size} Aktif)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Sensors,
+                            contentDescription = null,
+                            tint = if (webSocketConnected) StatusGreen else Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (webSocketConnected) "Radar Aktif • ${pingMs}ms" else "Çevrimdışı",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (webSocketConnected) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "(${filteredMembers.size} Kişi)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // AI Grounding Intelligence button
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.clickable { showAiDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = BirlikteCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "Mekan & Trafik",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = BirlikteCyan
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Location-based filter chips row
+            // Location-based filter chips row with spacious touch targets
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
                     selected = activeFilter == MapDistanceFilter.ALL,
                     onClick = { activeFilter = MapDistanceFilter.ALL },
-                    label = { Text(Loc.s("all", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("all", lang), fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BirlikteIndigo,
                         selectedLabelColor = Color.White
-                    )
+                    ),
+                    modifier = Modifier.height(38.dp)
                 )
                 FilterChip(
                     selected = activeFilter == MapDistanceFilter.ON_THE_WAY,
                     onClick = { activeFilter = MapDistanceFilter.ON_THE_WAY },
-                    label = { Text(Loc.s("filter_on_way", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("filter_on_way", lang), fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BirlikteIndigo,
                         selectedLabelColor = Color.White
-                    )
+                    ),
+                    modifier = Modifier.height(38.dp)
                 )
                 FilterChip(
                     selected = activeFilter == MapDistanceFilter.UNDER_2KM,
                     onClick = { activeFilter = MapDistanceFilter.UNDER_2KM },
-                    label = { Text(Loc.s("filter_near", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("filter_near", lang), fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BirlikteIndigo,
                         selectedLabelColor = Color.White
-                    )
+                    ),
+                    modifier = Modifier.height(38.dp)
                 )
                 FilterChip(
                     selected = activeFilter == MapDistanceFilter.UNDER_5KM,
                     onClick = { activeFilter = MapDistanceFilter.UNDER_5KM },
-                    label = { Text(Loc.s("filter_5km", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("filter_5km", lang), fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BirlikteIndigo,
                         selectedLabelColor = Color.White
-                    )
+                    ),
+                    modifier = Modifier.height(38.dp)
                 )
                 FilterChip(
                     selected = activeFilter == MapDistanceFilter.ARRIVED,
                     onClick = { activeFilter = MapDistanceFilter.ARRIVED },
-                    label = { Text(Loc.s("filter_arrived", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("filter_arrived", lang), fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = BirlikteIndigo,
                         selectedLabelColor = Color.White
-                    )
+                    ),
+                    modifier = Modifier.height(38.dp)
                 )
             }
         }
 
-        // Bottom member selector shortcuts (floating pill avatars)
+        // Bottom Carousel for Member Quick Selection (when no member is actively inspected)
         if (selectedMember == null) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(12.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                shadowElevation = 6.dp
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                shadowElevation = 8.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                         .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
                         "Kişiye Odaklan:",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold
                     )
                     event.members.filter { it.attendance == AttendanceStatus.COMING }.forEach { m ->
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(24.dp),
                             color = Color(m.avatarColorHex).copy(alpha = 0.15f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(m.avatarColorHex)),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(m.avatarColorHex)),
                             modifier = Modifier.clickable { onSelectMember(m) }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
                                     shape = CircleShape,
                                     color = Color(m.avatarColorHex),
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(24.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text(m.avatarInitials, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text(m.avatarInitials, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     m.name.split(" ").firstOrNull() ?: m.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    if (m.liveStatus == LiveStatus.ARRIVED) "📍" else "${m.etaMinutes}m",
-                                    fontSize = 10.sp,
-                                    color = StatusGreen
+                                    if (m.liveStatus == LiveStatus.ARRIVED) "📍" else "${m.etaMinutes} dk",
+                                    fontSize = 12.sp,
+                                    color = StatusGreen,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
@@ -251,5 +289,12 @@ fun MapScreen(
                 }
             }
         }
+    }
+
+    if (showAiDialog) {
+        GeminiVenueIntelligenceDialog(
+            event = event,
+            onDismiss = { showAiDialog = false }
+        )
     }
 }

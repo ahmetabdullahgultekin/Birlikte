@@ -1,5 +1,9 @@
 package com.example.data
 
+import android.content.Context
+import android.util.Log
+import com.example.R
+import com.example.auth.AuthManager
 import com.example.model.AppLanguage
 import com.example.model.AttendanceStatus
 import com.example.model.ChatMessage
@@ -12,6 +16,8 @@ import com.example.model.NotificationPreferences
 import com.example.model.OrganizationEvent
 import com.example.model.PrivacyMode
 import com.example.model.VehicleType
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,8 +35,25 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 class AppRepository(
+    context: Context? = null,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) {
+    // Firestore instance with custom database ID
+    private val firestore: FirebaseFirestore? = try {
+        if (context != null) {
+            val dbId = context.getString(R.string.firestore_database_id)
+            FirebaseFirestore.getInstance(dbId)
+        } else null
+    } catch (e: Exception) {
+        Log.w("AppRepository", "Firestore initialization fallback: ${e.message}")
+        null
+    }
+
+    private var eventListener: ListenerRegistration? = null
+    private var membersListener: ListenerRegistration? = null
+    private var messagesListener: ListenerRegistration? = null
+    private var expensesListener: ListenerRegistration? = null
+
     // Current Language & Dark Mode
     private val _appLanguage = MutableStateFlow(AppLanguage.TR)
     val appLanguage: StateFlow<AppLanguage> = _appLanguage.asStateFlow()
@@ -88,6 +111,54 @@ class AppRepository(
     init {
         loadInitialData()
         startWebSocketSimulation()
+        initFirestoreSync()
+    }
+
+    private fun initFirestoreSync() {
+        val db = firestore ?: return
+        val currentUid = AuthManager.currentUser?.uid ?: return
+        val evId = _currentEventId.value
+
+        try {
+            // Listen to messages
+            messagesListener?.remove()
+            messagesListener = db.collection("events").document(evId)
+                .collection("messages")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w("AppRepository", "Messages listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && !snapshot.isEmpty) {
+                        val remoteMsgs = snapshot.documents.mapNotNull { doc ->
+                            val text = doc.getString("text") ?: return@mapNotNull null
+                            val senderId = doc.getString("senderId") ?: ""
+                            val senderName = doc.getString("senderName") ?: "Üye"
+                            val timestamp = doc.getString("timestamp") ?: "Şimdi"
+                            val isQuick = doc.getBoolean("isQuickStatus") ?: false
+                            val isEncrypted = doc.getBoolean("isEncrypted") ?: true
+                            ChatMessage(
+                                id = doc.id,
+                                eventId = evId,
+                                senderId = senderId,
+                                senderName = senderName,
+                                text = text,
+                                timestamp = timestamp,
+                                isSentByMe = senderId == currentUid,
+                                isQuickStatus = isQuick,
+                                isEncrypted = isEncrypted
+                            )
+                        }
+                        if (remoteMsgs.isNotEmpty()) {
+                            _chatMessages.update { current ->
+                                (current + remoteMsgs).distinctBy { it.id }
+                            }
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w("AppRepository", "Firestore sync init error: ${e.message}")
+        }
     }
 
     fun setLanguage(lang: AppLanguage) {
@@ -103,11 +174,10 @@ class AppRepository(
         _isOffline.value = newStatus
         _webSocketConnected.value = !newStatus
         if (!newStatus) {
-            // Reconnected: flush queued sync actions
             _queuedSyncCount.value = 0
-            showToast("İnternet bağlantısı sağlandı. Yerel veriler sunucuyla eşitlendi! 🟢")
+            showToast("İnternet bağlantısı sağlandı. Yerel veriler eşitlendi! 🟢")
         } else {
-            showToast("Çevrimdışı moda geçildi. Değişiklikler yerel Room önbelleğinde saklanıyor. 📶")
+            showToast("Çevrimdışı moda geçildi. Değişiklikler yerel önbellekte saklanıyor. 📶")
         }
     }
 
@@ -117,6 +187,7 @@ class AppRepository(
 
     fun selectEvent(eventId: String) {
         _currentEventId.value = eventId
+        initFirestoreSync()
     }
 
     fun dismissToast() {
@@ -163,11 +234,30 @@ class AppRepository(
             }
         }
 
-        if (_isOffline.value) {
+        // Push to Firestore if online
+        val db = firestore
+        val user = AuthManager.currentUser
+        if (db != null && user != null && !_isOffline.value) {
+            val memberData = hashMapOf(
+                "userId" to user.uid,
+                "name" to (user.displayName ?: "Siz"),
+                "attendance" to attendance.name,
+                "liveStatus" to liveStatus.name,
+                "departureTime" to departureTime,
+                "originName" to originName,
+                "vehicleType" to vehicleType.name,
+                "privacyMode" to privacyMode.name
+            )
+            db.collection("events").document(currentEvId)
+                .collection("members").document(user.uid)
+                .set(memberData)
+                .addOnFailureListener {
+                    Log.w("AppRepository", "Member update firestore failed: ${it.message}")
+                }
+        } else if (_isOffline.value) {
             _queuedSyncCount.update { it + 1 }
         }
 
-        // Post an encrypted status notification message to chat
         val statusText = when (liveStatus) {
             LiveStatus.EN_ROUTE -> "🚗 $originName konumundan yola çıktım ($departureTime)"
             LiveStatus.ARRIVED -> "📍 Alana vardım!"
@@ -180,11 +270,16 @@ class AppRepository(
 
     fun sendChatMessage(text: String, isQuickStatus: Boolean = false, locationShare: String? = null) {
         val currentEvId = _currentEventId.value
+        val user = AuthManager.currentUser
+        val senderId = user?.uid ?: "user-me"
+        val senderName = user?.displayName ?: "Can Demir (Siz)"
+        val msgId = "msg-${System.currentTimeMillis()}"
+
         val newMsg = ChatMessage(
-            id = "msg-${System.currentTimeMillis()}",
+            id = msgId,
             eventId = currentEvId,
-            senderId = "user-me",
-            senderName = "Can Demir (Siz)",
+            senderId = senderId,
+            senderName = senderName,
             text = text,
             timestamp = "19:${(10..55).random()}",
             isSentByMe = true,
@@ -194,7 +289,25 @@ class AppRepository(
         )
         _chatMessages.update { it + newMsg }
 
-        if (_isOffline.value) {
+        // Sync with Firestore
+        val db = firestore
+        if (db != null && user != null && !_isOffline.value) {
+            val payload = hashMapOf(
+                "eventId" to currentEvId,
+                "senderId" to senderId,
+                "senderName" to senderName,
+                "text" to text,
+                "timestamp" to newMsg.timestamp,
+                "isQuickStatus" to isQuickStatus,
+                "isEncrypted" to true
+            )
+            db.collection("events").document(currentEvId)
+                .collection("messages").document(msgId)
+                .set(payload)
+                .addOnFailureListener {
+                    Log.w("AppRepository", "Message firestore send failed: ${it.message}")
+                }
+        } else if (_isOffline.value) {
             _queuedSyncCount.update { it + 1 }
         }
     }
@@ -209,9 +322,10 @@ class AppRepository(
         val currentEv = getCurrentEvent() ?: return
         val payer = currentEv.members.find { it.id == paidByMemberId }
         val payerName = payer?.name ?: "Bilinmeyen"
+        val expId = "exp-${System.currentTimeMillis()}"
 
         val newExpense = Expense(
-            id = "exp-${System.currentTimeMillis()}",
+            id = expId,
             eventId = currentEv.id,
             title = title,
             amount = amount,
@@ -224,11 +338,30 @@ class AppRepository(
         _expenses.update { it + newExpense }
         recalculateDebts()
 
-        if (_isOffline.value) {
+        // Sync with Firestore
+        val db = firestore
+        val user = AuthManager.currentUser
+        if (db != null && user != null && !_isOffline.value) {
+            val payload = hashMapOf(
+                "eventId" to currentEv.id,
+                "title" to title,
+                "amount" to amount,
+                "paidByMemberId" to user.uid,
+                "paidByMemberName" to payerName,
+                "category" to category.name,
+                "timestamp" to newExpense.timestamp
+            )
+            db.collection("events").document(currentEv.id)
+                .collection("expenses").document(expId)
+                .set(payload)
+                .addOnFailureListener {
+                    Log.w("AppRepository", "Expense firestore send failed: ${it.message}")
+                }
+        } else if (_isOffline.value) {
             _queuedSyncCount.update { it + 1 }
-        } else {
-            showToast("Masraf eklendi: $title (₺${amount.toInt()}) 💸")
         }
+
+        showToast("Masraf eklendi: $title (₺${amount.toInt()}) 💸")
     }
 
     fun settleDebt(settlementId: String) {
@@ -252,11 +385,15 @@ class AppRepository(
         lng: Double
     ) {
         val newId = "event-${System.currentTimeMillis()}"
+        val user = AuthManager.currentUser
+        val myName = user?.displayName ?: "Can Demir (Siz)"
+        val myUid = user?.uid ?: "user-me"
+
         val initialMembers = listOf(
             Member(
-                id = "user-me",
-                name = "Can Demir (Siz)",
-                avatarInitials = "CD",
+                id = myUid,
+                name = myName,
+                avatarInitials = myName.take(2).uppercase(),
                 avatarColorHex = 0xFF4F46E5,
                 isCurrentUser = true,
                 isOrganizer = true,
@@ -295,6 +432,22 @@ class AppRepository(
 
         _events.update { it + newEvent }
         _currentEventId.value = newId
+
+        // Firestore sync
+        val db = firestore
+        if (db != null && user != null && !_isOffline.value) {
+            val payload = hashMapOf(
+                "title" to title,
+                "description" to description,
+                "category" to category,
+                "venueName" to venueName,
+                "venueAddress" to venueAddress,
+                "organizerId" to user.uid,
+                "inviteCode" to newEvent.inviteCode
+            )
+            db.collection("events").document(newId).set(payload)
+        }
+
         showToast("Yeni organizasyon oluşturuldu: $title 🎉")
     }
 
@@ -311,7 +464,6 @@ class AppRepository(
             return
         }
 
-        // Net balance map for each member: balance > 0 means they paid more and are owed money
         val balances = mutableMapOf<String, Double>()
         currentEv.members.forEach { balances[it.id] = 0.0 }
 
@@ -326,7 +478,6 @@ class AppRepository(
             }
         }
 
-        // Separate debtors (owe money < 0) and creditors (are owed money > 0)
         val debtors = mutableListOf<Pair<String, Double>>()
         val creditors = mutableListOf<Pair<String, Double>>()
 
@@ -381,10 +532,8 @@ class AppRepository(
                     simulationStep += 0.05
                     if (simulationStep > 1.0) simulationStep = 0.05
 
-                    // Fluctuate ping slightly
                     _webSocketPingMs.value = (20..38).random()
 
-                    // Move members toward the venue along curve
                     val currentEvId = _currentEventId.value
                     _events.update { list ->
                         list.map { ev ->
@@ -393,7 +542,6 @@ class AppRepository(
                                     if (m.attendance == AttendanceStatus.COMING &&
                                         m.liveStatus != LiveStatus.ARRIVED
                                     ) {
-                                        // Interpolate between origin and venue
                                         val factor = ((simulationStep + (m.id.hashCode() % 5) * 0.15) % 0.95).coerceIn(0.1, 0.95)
                                         val newLat = m.originLat + (ev.venueLat - m.originLat) * factor
                                         val newLng = m.originLng + (ev.venueLng - m.originLng) * factor

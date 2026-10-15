@@ -6,30 +6,36 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +46,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -47,18 +54,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import com.example.auth.AuthManager
 import com.example.data.AppRepository
 import com.example.localization.Loc
 import com.example.model.Member
 import com.example.ui.components.EventSwitcherDialog
+import com.example.ui.components.GeminiVenueIntelligenceDialog
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.ExpenseScreen
 import com.example.ui.screens.MapScreen
@@ -71,7 +83,14 @@ import com.example.ui.theme.StatusRose
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BirlikteApp(repository: AppRepository) {
+fun BirlikteApp(
+    repository: AppRepository,
+    onSignOut: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
+
     val lang by repository.appLanguage.collectAsState()
     val isDark by repository.isDarkMode.collectAsState()
     val isOffline by repository.isOffline.collectAsState()
@@ -92,58 +111,74 @@ fun BirlikteApp(repository: AppRepository) {
     var currentTab by remember { mutableIntStateOf(0) }
     var selectedMapMember by remember { mutableStateOf<Member?>(null) }
     var showEventSwitcherDialog by remember { mutableStateOf(false) }
+    var showAiDialog by remember { mutableStateOf(false) }
+    var showUserMenu by remember { mutableStateOf(false) }
+
+    val currentUser = AuthManager.currentUser
+    val userInitials = (currentUser?.displayName ?: "Can Demir").split(" ")
+        .mapNotNull { it.firstOrNull()?.toString() }
+        .take(2)
+        .joinToString("")
+        .ifEmpty { "CD" }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { showEventSwitcherDialog = true }
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                Loc.s("app_title", lang),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = BirlikteIndigo
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            // Online/Offline pill
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isOffline) StatusRose.copy(alpha = 0.15f) else StatusGreen.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    if (isOffline) "📶 Çevrimdışı" else "🟢 Canlı",
-                                    color = if (isOffline) StatusRose else StatusGreen,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                        Surface(
+                            shape = CircleShape,
+                            color = BirlikteIndigo,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("B", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             }
                         }
-
-                        if (currentEvent != null) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    currentEvent.title,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    currentEvent?.title ?: "Birlikte",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 160.dp)
                                 )
-                                Icon(
-                                    Icons.Default.ArrowDropDown,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isOffline) StatusRose.copy(alpha = 0.15f) else StatusGreen.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        if (isOffline) "📶 Çevrimdışı" else "🟢 Canlı Bulut",
+                                        color = if (isOffline) StatusRose else StatusGreen,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 },
                 actions = {
+                    // AI Maps & Search Grounding Button
+                    IconButton(onClick = { showAiDialog = true }) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "Mekan & Rota Rehberi",
+                            tint = BirlikteCyan
+                        )
+                    }
+
+                    // Theme toggle
                     IconButton(onClick = { repository.toggleDarkMode() }) {
                         Icon(
                             if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -151,6 +186,8 @@ fun BirlikteApp(repository: AppRepository) {
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
+
+                    // Switch Event action
                     IconButton(onClick = { showEventSwitcherDialog = true }) {
                         Icon(
                             Icons.Default.SwapHoriz,
@@ -158,8 +195,62 @@ fun BirlikteApp(repository: AppRepository) {
                             tint = BirlikteIndigo
                         )
                     }
+
+                    // User Profile & Settings Avatar
+                    Box {
+                        Surface(
+                            shape = CircleShape,
+                            color = BirlikteIndigo.copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, BirlikteIndigo),
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clickable { showUserMenu = true }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    userInitials,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = BirlikteIndigo
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showUserMenu,
+                            onDismissRequest = { showUserMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(currentUser?.displayName ?: "Kullanıcı") },
+                                onClick = { },
+                                leadingIcon = { Icon(Icons.Default.Group, contentDescription = null) },
+                                enabled = false
+                            )
+                            DropdownMenuItem(
+                                text = { Text(Loc.s("tab_settings", lang)) },
+                                onClick = {
+                                    showUserMenu = false
+                                    currentTab = 4
+                                },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Çıkış Yap (Google)", color = StatusRose) },
+                                onClick = {
+                                    showUserMenu = false
+                                    AuthManager.signOut(
+                                        credentialManager = credentialManager,
+                                        onSignOutComplete = onSignOut,
+                                        scope = scope
+                                    )
+                                },
+                                leadingIcon = { Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = StatusRose) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
@@ -174,7 +265,7 @@ fun BirlikteApp(repository: AppRepository) {
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
                     icon = { Icon(Icons.Default.Group, contentDescription = Loc.s("tab_overview", lang)) },
-                    label = { Text(Loc.s("tab_overview", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("tab_overview", lang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = BirlikteIndigo,
                         indicatorColor = BirlikteIndigo.copy(alpha = 0.15f)
@@ -194,7 +285,7 @@ fun BirlikteApp(repository: AppRepository) {
                             Icon(Icons.Default.Map, contentDescription = Loc.s("tab_map", lang))
                         }
                     },
-                    label = { Text(Loc.s("tab_map", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("tab_map", lang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = BirlikteIndigo,
                         indicatorColor = BirlikteIndigo.copy(alpha = 0.15f)
@@ -216,7 +307,7 @@ fun BirlikteApp(repository: AppRepository) {
                             Icon(Icons.Default.ChatBubble, contentDescription = Loc.s("tab_chat", lang))
                         }
                     },
-                    label = { Text(Loc.s("tab_chat", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("tab_chat", lang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = BirlikteIndigo,
                         indicatorColor = BirlikteIndigo.copy(alpha = 0.15f)
@@ -228,7 +319,7 @@ fun BirlikteApp(repository: AppRepository) {
                     selected = currentTab == 3,
                     onClick = { currentTab = 3 },
                     icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = Loc.s("tab_expenses", lang)) },
-                    label = { Text(Loc.s("tab_expenses", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("tab_expenses", lang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = BirlikteIndigo,
                         indicatorColor = BirlikteIndigo.copy(alpha = 0.15f)
@@ -240,7 +331,7 @@ fun BirlikteApp(repository: AppRepository) {
                     selected = currentTab == 4,
                     onClick = { currentTab = 4 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = Loc.s("tab_settings", lang)) },
-                    label = { Text(Loc.s("tab_settings", lang), fontSize = 11.sp) },
+                    label = { Text(Loc.s("tab_settings", lang), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = BirlikteIndigo,
                         indicatorColor = BirlikteIndigo.copy(alpha = 0.15f)
@@ -331,20 +422,20 @@ fun BirlikteApp(repository: AppRepository) {
                     .padding(top = 10.dp, start = 16.dp, end = 16.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shadowElevation = 8.dp,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BirlikteIndigo)
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, BirlikteIndigo)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             activeToast ?: "",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -364,6 +455,13 @@ fun BirlikteApp(repository: AppRepository) {
                 repository.createNewEvent(title, desc, cat, date, time, venue, addr, lat, lng)
             },
             onDismiss = { showEventSwitcherDialog = false }
+        )
+    }
+
+    if (showAiDialog && currentEvent != null) {
+        GeminiVenueIntelligenceDialog(
+            event = currentEvent,
+            onDismiss = { showAiDialog = false }
         )
     }
 }

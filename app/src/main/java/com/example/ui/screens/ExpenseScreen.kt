@@ -234,7 +234,7 @@ fun ExpenseScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
-                                    Icons.Default.ArrowForward,
+                                    androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant

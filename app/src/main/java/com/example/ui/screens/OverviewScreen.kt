@@ -4,13 +4,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,28 +21,29 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,7 +60,9 @@ import com.example.model.AttendanceStatus
 import com.example.model.LiveStatus
 import com.example.model.Member
 import com.example.model.OrganizationEvent
+import com.example.model.PrivacyMode
 import com.example.model.VehicleType
+import com.example.ui.components.GeminiVenueIntelligenceDialog
 import com.example.ui.components.QrInviteDialog
 import com.example.ui.components.StatusUpdateDialog
 import com.example.ui.theme.BirlikteCyan
@@ -71,7 +71,6 @@ import com.example.ui.theme.StatusAmber
 import com.example.ui.theme.StatusGreen
 import com.example.ui.theme.StatusRose
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OverviewScreen(
     event: OrganizationEvent,
@@ -83,43 +82,46 @@ fun OverviewScreen(
         departureTime: String,
         originName: String,
         vehicleType: VehicleType,
-        privacyMode: com.example.model.PrivacyMode
+        privacyMode: PrivacyMode
     ) -> Unit
 ) {
     val context = LocalContext.current
     var showStatusDialog by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
-    var selectedFilter by remember { mutableStateOf<AttendanceStatus?>(null) }
+    var showAiDialog by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     val myMember = event.members.find { it.isCurrentUser } ?: event.members.firstOrNull()
 
-    val filteredMembers = remember(event.members, selectedFilter) {
-        if (selectedFilter == null) event.members
-        else event.members.filter { it.attendance == selectedFilter }
-    }
+    val attendingList = remember(event.members) { event.members.filter { it.attendance == AttendanceStatus.COMING } }
+    val maybeList = remember(event.members) { event.members.filter { it.attendance == AttendanceStatus.MAYBE } }
+    val notAttendingList = remember(event.members) { event.members.filter { it.attendance == AttendanceStatus.NOT_COMING } }
 
-    val attendingCount = event.members.count { it.attendance == AttendanceStatus.COMING }
-    val notAttendingCount = event.members.count { it.attendance == AttendanceStatus.NOT_COMING }
-    val maybeCount = event.members.count { it.attendance == AttendanceStatus.MAYBE }
-    val arrivedCount = event.members.count { it.liveStatus == LiveStatus.ARRIVED }
+    val currentDisplayList = when (selectedTabIndex) {
+        0 -> event.members
+        1 -> attendingList
+        2 -> maybeList
+        else -> notAttendingList
+    }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Event Main Hero Card
         item {
             Spacer(modifier = Modifier.height(4.dp))
-            // Event Main Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -127,22 +129,21 @@ fun OverviewScreen(
                     ) {
                         Surface(
                             color = BirlikteIndigo,
-                            shape = RoundedCornerShape(6.dp)
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 event.category,
                                 color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Copy code button
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                                 modifier = Modifier.clickable {
                                     val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     cb.setPrimaryClip(ClipData.newPlainText("Davet", event.inviteCode))
@@ -151,11 +152,11 @@ fun OverviewScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(event.inviteCode, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(event.inviteCode, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                             Spacer(modifier = Modifier.width(8.dp))
@@ -165,56 +166,74 @@ fun OverviewScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
                         event.title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         event.description,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                        lineHeight = 20.sp
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Place, contentDescription = null, tint = StatusAmber, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Default.Place, contentDescription = null, tint = StatusAmber, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             "${event.venueName} • ${event.venueAddress}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = BirlikteCyan, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = BirlikteCyan, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             "${event.eventDate} • ${event.eventTime}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    // Gemini Maps & Search Grounding Button
+                    FilledTonalButton(
+                        onClick = { showAiDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = BirlikteIndigo, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Mekan & Rota Rehberi (Google Maps & Search)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = BirlikteIndigo
                         )
                     }
                 }
             }
         }
 
-        // My Status Card
+        // Spacious My Status Card
         if (myMember != null) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -224,13 +243,13 @@ fun OverviewScreen(
                                 Surface(
                                     shape = CircleShape,
                                     color = BirlikteIndigo,
-                                    modifier = Modifier.size(38.dp)
+                                    modifier = Modifier.size(46.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text(myMember.avatarInitials, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text(myMember.avatarInitials, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
                                         "${myMember.name} (Siz)",
@@ -239,7 +258,7 @@ fun OverviewScreen(
                                     )
                                     Text(
                                         "${myMember.originName} • ${Loc.getVehicleLabel(myMember.vehicleType, lang)}",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -248,18 +267,20 @@ fun OverviewScreen(
                             Button(
                                 onClick = { showStatusDialog = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = BirlikteIndigo),
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.height(44.dp)
                             ) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Durumu Güncelle", fontSize = 12.sp)
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Güncelle", fontSize = 13.sp)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 "Durum: ${Loc.getLiveStatusLabel(myMember.liveStatus, lang)}",
@@ -268,7 +289,7 @@ fun OverviewScreen(
                                 color = StatusGreen
                             )
                             Text(
-                                "Çıkış: ${myMember.departureTime} | Kalan: ${myMember.etaMinutes} dk",
+                                "Çıkış: ${myMember.departureTime} • Kalan: ${myMember.etaMinutes} dk",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -278,71 +299,39 @@ fun OverviewScreen(
             }
         }
 
-        // Attendance Quick Stats Cards (Gelenler, Gelmeyenler, Kararsız, Varanlar)
+        // Roomy Secondary Tabs for attendance filtering
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            TabRow(
+                selectedTabIndex = selectedTabIndex,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = BirlikteIndigo
             ) {
-                StatCard(
-                    title = "Gelenler",
-                    count = attendingCount,
-                    color = StatusGreen,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    text = { Text("Tümü (${event.members.size})", fontWeight = FontWeight.SemiBold) }
                 )
-                StatCard(
-                    title = "Gelmiyor",
-                    count = notAttendingCount,
-                    color = StatusRose,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { selectedTabIndex = 1 },
+                    text = { Text("Gelenler (${attendingList.size})", fontWeight = FontWeight.SemiBold, color = StatusGreen) }
                 )
-                StatCard(
-                    title = "Kararsız",
-                    count = maybeCount,
-                    color = StatusAmber,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = selectedTabIndex == 2,
+                    onClick = { selectedTabIndex = 2 },
+                    text = { Text("Kararsız (${maybeList.size})", fontWeight = FontWeight.SemiBold, color = StatusAmber) }
                 )
-                StatCard(
-                    title = "Vardı",
-                    count = arrivedCount,
-                    color = BirlikteCyan,
-                    modifier = Modifier.weight(1f)
+                Tab(
+                    selected = selectedTabIndex == 3,
+                    onClick = { selectedTabIndex = 3 },
+                    text = { Text("Gelmeyenler (${notAttendingList.size})", fontWeight = FontWeight.SemiBold, color = StatusRose) }
                 )
             }
         }
 
-        // Filter chips (Tümü / Geliyor / Gelmiyor / Kararsız)
-        item {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                FilterChip(
-                    selected = selectedFilter == null,
-                    onClick = { selectedFilter = null },
-                    label = { Text("Tümü (${event.members.size})") }
-                )
-                FilterChip(
-                    selected = selectedFilter == AttendanceStatus.COMING,
-                    onClick = { selectedFilter = AttendanceStatus.COMING },
-                    label = { Text("Gelenler ($attendingCount)") }
-                )
-                FilterChip(
-                    selected = selectedFilter == AttendanceStatus.MAYBE,
-                    onClick = { selectedFilter = AttendanceStatus.MAYBE },
-                    label = { Text("Kararsız ($maybeCount)") }
-                )
-                FilterChip(
-                    selected = selectedFilter == AttendanceStatus.NOT_COMING,
-                    onClick = { selectedFilter = AttendanceStatus.NOT_COMING },
-                    label = { Text("Gelmeyenler ($notAttendingCount)") }
-                )
-            }
-        }
-
-        // Member Cards List
-        items(filteredMembers, key = { it.id }) { member ->
-            MemberCardItem(
+        // Spacious Member Cards
+        items(currentDisplayList, key = { it.id }) { member ->
+            SpaciousMemberCard(
                 member = member,
                 lang = lang,
                 onShowOnMap = { onNavigateToMapWithMember(member) }
@@ -373,55 +362,30 @@ fun OverviewScreen(
             onDismiss = { showQrDialog = false }
         )
     }
-}
 
-@Composable
-private fun StatCard(
-    title: String,
-    count: Int,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.12f),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                count.toString(),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-            Text(
-                title,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+    if (showAiDialog) {
+        GeminiVenueIntelligenceDialog(
+            event = event,
+            onDismiss = { showAiDialog = false }
+        )
     }
 }
 
 @Composable
-private fun MemberCardItem(
+private fun SpaciousMemberCard(
     member: Member,
     lang: AppLanguage,
     onShowOnMap: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -431,19 +395,18 @@ private fun MemberCardItem(
                     Surface(
                         shape = CircleShape,
                         color = Color(member.avatarColorHex),
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(52.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 member.avatarInitials,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
+                                fontSize = 18.sp
                             )
                         }
                     }
 
-                    // Small vehicle emoji badge on corner
                     val vehicleEmoji = when (member.vehicleType) {
                         VehicleType.CAR -> "🚗"
                         VehicleType.SUBWAY -> "🚇"
@@ -455,36 +418,36 @@ private fun MemberCardItem(
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        shadowElevation = 2.dp,
+                        shadowElevation = 3.dp,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(20.dp)
+                            .size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(vehicleEmoji, fontSize = 11.sp)
+                            Text(vehicleEmoji, fontSize = 13.sp)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             member.name,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         if (member.isOrganizer) {
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 color = StatusAmber.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(4.dp)
+                                shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
                                     "Organizatör",
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    fontSize = 11.sp,
                                     color = StatusAmber,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -492,14 +455,14 @@ private fun MemberCardItem(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         "${Loc.s("departure_from", lang)}: ${member.originName} • ${member.departureTime}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                // Live status badge
                 val (statusColor, statusText) = when (member.liveStatus) {
                     LiveStatus.ARRIVED -> Pair(StatusGreen, Loc.getLiveStatusLabel(LiveStatus.ARRIVED, lang))
                     LiveStatus.IN_TRAFFIC -> Pair(StatusRose, Loc.getLiveStatusLabel(LiveStatus.IN_TRAFFIC, lang))
@@ -510,71 +473,69 @@ private fun MemberCardItem(
 
                 Surface(
                     color = statusColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         statusText,
                         color = statusColor,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Sub-row: Telemetry stats and "Haritada Göster" action
+            // Sub-row: Telemetry stats and large 48dp touch target "Haritada Göster" action
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (member.attendance == AttendanceStatus.COMING) {
+                if (member.attendance == AttendanceStatus.COMING) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Text(
                             "📍 ${member.distanceToVenueKm} km",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             "⚡ ${member.speedKmH} km/h",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             "🔋 %${member.batteryLevel}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             "🕒 ${if (member.liveStatus == LiveStatus.ARRIVED) "Vardı" else "${member.etaMinutes} dk"}",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = StatusGreen
                         )
-                    } else {
-                        Text(
-                            Loc.getAttendanceLabel(member.attendance, lang),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
-                }
 
-                if (member.attendance == AttendanceStatus.COMING) {
                     OutlinedButton(
                         onClick = onShowOnMap,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(32.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.height(44.dp)
                     ) {
-                        Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(Loc.s("show_on_map", lang), fontSize = 11.sp)
+                        Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(Loc.s("show_on_map", lang), fontSize = 13.sp)
                     }
+                } else {
+                    Text(
+                        Loc.getAttendanceLabel(member.attendance, lang),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

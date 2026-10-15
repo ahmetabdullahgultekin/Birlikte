@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Event",
+      "description": "An organization or gathering event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "eventDate": { "type": "string" },
+        "eventTime": { "type": "string" },
+        "venueName": { "type": "string" },
+        "venueAddress": { "type": "string" },
+        "venueLat": { "type": "number" },
+        "venueLng": { "type": "number" },
+        "inviteCode": { "type": "string" },
+        "organizerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "venueName", "organizerId", "createdAt"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "A member participant of an event with live location and transit info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "avatarInitials": { "type": "string" },
+        "avatarColorHex": { "type": "integer" },
+        "attendance": { "type": "string" },
+        "liveStatus": { "type": "string" },
+        "departureTime": { "type": "string" },
+        "originName": { "type": "string" },
+        "vehicleType": { "type": "string" },
+        "currentLat": { "type": "number" },
+        "currentLng": { "type": "number" },
+        "originLat": { "type": "number" },
+        "originLng": { "type": "number" },
+        "speedKmH": { "type": "integer" },
+        "batteryLevel": { "type": "integer" },
+        "etaMinutes": { "type": "integer" },
+        "distanceToVenueKm": { "type": "number" },
+        "privacyMode": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "attendance"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "An encrypted chat message or quick status broadcast in an event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isQuickStatus": { "type": "boolean" },
+        "isEncrypted": { "type": "boolean" },
+        "locationShareText": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventId", "senderId", "senderName", "text"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "An expense logged in an event for shared cost calculation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "eventId": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "paidByMemberId": { "type": "string" },
+        "paidByMemberName": { "type": "string" },
+        "splitMemberIds": { "type": "array" },
+        "category": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "eventId", "title", "amount", "paidByMemberId"]
+    }
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Top-level events collection"
+    },
+    "/events/{eventId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/Member" },
+      "description": "Subcollection of event members with transit telemetry"
+    },
+    "/events/{eventId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Subcollection of event chat messages"
+    },
+    "/events/{eventId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Subcollection of event shared expenses"
+    }
+  }
+}
