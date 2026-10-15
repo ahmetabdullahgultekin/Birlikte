@@ -1,0 +1,6 @@
+{
+  "name": "Birlikte",
+  "description": "Organizasyon ve buluşmalarda canlı harita takibi, ortak sohbet, masraf bölüşümü ve üye yönetimi uygulaması.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

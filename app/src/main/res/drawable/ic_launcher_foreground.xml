@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pin shadow / glow -->
+    <path
+        android:fillColor="#33000000"
+        android:pathData="M54,82c-6,0 -16,-2.5 -16,-5s10,-5 16,-5 16,2.5 16,5 -10,5 -16,5z" />
+
+    <!-- Stylized modern Pin Body -->
+    <path
+        android:fillColor="#6366F1"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round"
+        android:pathData="M54,23 C41.3,23 31,33.3 31,46 C31,61 49.5,75 54,78 C58.5,75 77,61 77,46 C77,33.3 66.7,23 54,23 Z" />
+
+    <!-- Inner Pin Aperture -->
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M54,46m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0" />
+
+    <!-- People Gathering / Group figures inside pin -->
+    <!-- Center Person -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,39m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M50.5,45 C48.5,45 47,46.5 47,48.5 L47,52 L61,52 L61,48.5 C61,46.5 59.5,45 57.5,45 Z" />
+
+    <!-- Left Person -->
+    <path
+        android:fillColor="#A5B4FC"
+        android:pathData="M44.5,42m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+    <path
+        android:fillColor="#A5B4FC"
+        android:pathData="M42,47 C40.5,47 39.5,48 39.5,49.5 L39.5,52 L45.5,52 L45.5,49 C45.5,47.8 44.2,47 42,47 Z" />
+
+    <!-- Right Person -->
+    <path
+        android:fillColor="#A5B4FC"
+        android:pathData="M63.5,42m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+    <path
+        android:fillColor="#A5B4FC"
+        android:pathData="M66,47 C67.5,47 68.5,48 68.5,49.5 L68.5,52 L62.5,52 L62.5,49 C62.5,47.8 63.8,47 66,47 Z" />
+
+    <!-- Top Beacon Wave -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M47,20 C51,18 57,18 61,20" />
+</vector>
